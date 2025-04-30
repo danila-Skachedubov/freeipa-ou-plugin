@@ -122,9 +122,37 @@ class ou(LDAPObject):
 
 @register()
 class ou_add(LDAPCreate):
-    """
-    Add a new Organizational Unit.
-    """
+    __doc__ = _('Create a new Organizational Unit.')
+    msg_summary = _('Created Organizational Unit "%(value)s"')
+
+    def pre_callback(self, ldap, dn, entry_attrs, attrs_list, *keys, **options):
+        assert isinstance(dn, DN)
+        container_dn = DN(self.obj.container_dn, api.env.basedn)
+
+        try:
+            ldap.get_entry(container_dn, ['objectclass'])
+        except errors.NotFound:
+            container_entry = ldap.make_entry(
+                container_dn,
+                objectclass=['nsContainer', 'top'],
+                cn=['altou']
+            )
+            try:
+                ldap.add_entry(container_entry)
+            except errors.DuplicateEntry:
+                pass
+            except Exception as e:
+                raise errors.NotFound(
+                    reason=_('Failed to create container %(container)s: %(error)s') % {
+                        'container': str(container_dn),
+                        'error': str(e)
+                    }
+                )
+
+        if 'objectcategory' not in entry_attrs:
+            entry_attrs['objectCategory'] = f'CN=altOrganizationalUnit,CN=schema,{api.env.basedn}'
+
+        return dn
 
 @register()
 class ou_del(LDAPDelete):
